@@ -234,6 +234,7 @@ function worldToScreen(
 export default function InfiniteCanvas() {
   const dispatch = useDispatch();
   const doc = useSelector((s: RootState) => s.studio.document);
+  const variants = useSelector((s: RootState) => s.studio.variants);
   const selectedNodeId = useSelector((s: RootState) => s.studio.selectedNodeId);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -710,6 +711,9 @@ export default function InfiniteCanvas() {
               ch,
             );
             const isSelected = selectedNodeId === node.id;
+            const variant = node.variantId
+              ? variants.find((v) => v.id === node.variantId)
+              : null;
             return (
               <div
                 key={node.id}
@@ -721,6 +725,11 @@ export default function InfiniteCanvas() {
                   height: Math.max(1, rect.height),
                   borderColor: isSelected ? "#8b5cf6" : "#e5e7eb",
                   backgroundColor: node.color ?? "#f9fafb",
+                  backgroundImage: node.asset
+                    ? `url(${node.asset})`
+                    : undefined,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
                 }}
                 onPointerDown={(e) => {
                   e.stopPropagation();
@@ -733,6 +742,11 @@ export default function InfiniteCanvas() {
                 }}
               >
                 <div className="flex h-full flex-col items-center justify-center gap-1 p-2 text-center">
+                  {variant?.copy && (
+                    <span className="line-clamp-3 text-[10px] text-gray-700">
+                      {variant.copy}
+                    </span>
+                  )}
                   {node.sizeLabel && (
                     <span className="text-xs font-medium text-gray-500">
                       {node.sizeLabel}

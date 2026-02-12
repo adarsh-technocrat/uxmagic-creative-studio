@@ -1,26 +1,36 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useRouter } from "next/navigation";
 import {
   addUploadedFiles,
   addAIAssistantMessage,
   sendAIMessage,
   startNewProject,
+  loadProject,
 } from "@/store/studioSlice";
+import { createStandaloneProject } from "@/store/workspacesSlice";
+import { runBriefPipeline } from "@/lib/briefPipeline";
 import type { RootState } from "@/store";
 
 export default function LeftSidebar() {
   const dispatch = useDispatch();
+  const router = useRouter();
   const uploadedFiles = useSelector((s: RootState) => s.studio.uploadedFiles);
   const aiMessages = useSelector((s: RootState) => s.studio.aiMessages);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastFilesRef = useRef<File[]>([]);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       const files = Array.from(e.dataTransfer.files);
-      if (files.length) dispatch(addUploadedFiles(files));
+      if (files.length) {
+        lastFilesRef.current = files;
+        dispatch(addUploadedFiles(files));
+      }
     },
     [dispatch],
   );
@@ -33,30 +43,68 @@ export default function LeftSidebar() {
   const onFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files ? Array.from(e.target.files) : [];
-      if (files.length) dispatch(addUploadedFiles(files));
+      if (files.length) {
+        lastFilesRef.current = files;
+        dispatch(addUploadedFiles(files));
+      }
       e.target.value = "";
     },
     [dispatch],
   );
 
   const handleAskAI = useCallback(
-    (e: React.FormEvent<HTMLFormElement>) => {
+    async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const input = inputRef.current;
       const value = input?.value?.trim();
-      if (value) {
-        dispatch(sendAIMessage(value));
-        if (input) input.value = "";
-        setTimeout(() => {
-          dispatch(
-            addAIAssistantMessage(
-              "I have analyzed your input and I will raise a new brief. #1 Creating project brief.",
-            ),
-          );
-        }, 800);
+      const files = lastFilesRef.current;
+      if (!value && files.length === 0) return;
+
+      dispatch(sendAIMessage(value || "Create project from attached files."));
+      if (input) input.value = "";
+      setIsPipelineRunning(true);
+      dispatch(
+        addAIAssistantMessage(
+          "Drafting creative brief and generating sizes from your production brief…",
+        ),
+      );
+
+      try {
+        const result = await runBriefPipeline(files, value || undefined);
+        const newId = `proj-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        dispatch(
+          createStandaloneProject({
+            id: newId,
+            name: result.projectName,
+            document: result.document,
+            variants: result.variants,
+          }),
+        );
+        dispatch(
+          loadProject({
+            id: newId,
+            name: result.projectName,
+            document: result.document,
+            variants: result.variants,
+          }),
+        );
+        dispatch(
+          addAIAssistantMessage(
+            `Campaign ready. Created project "${result.projectName}" with ${result.document.nodes.length} creative sizes. You can edit in the editor.`,
+          ),
+        );
+        router.push(`/project/${newId}`);
+      } catch {
+        dispatch(
+          addAIAssistantMessage(
+            "Something went wrong. Please try again or start a new project.",
+          ),
+        );
+      } finally {
+        setIsPipelineRunning(false);
       }
     },
-    [dispatch],
+    [dispatch, router],
   );
 
   return (
@@ -153,9 +201,17 @@ export default function LeftSidebar() {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Ask AI..."
+            placeholder="Ask AI or describe brief..."
             className="min-w-0 flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none"
+            disabled={isPipelineRunning}
           />
+          <button
+            type="submit"
+            disabled={isPipelineRunning}
+            className="rounded bg-violet-600 px-2 py-1 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {isPipelineRunning ? "…" : "Create"}
+          </button>
         </form>
       </div>
     </aside>

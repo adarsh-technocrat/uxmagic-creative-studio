@@ -1,9 +1,11 @@
 import { createSlice } from "@reduxjs/toolkit";
 import type {
   AIMessage,
+  Comment,
   CreativeNode,
   JsonCanvasDocument,
   UploadedFile,
+  Variant,
 } from "@/types/jsonCanvas";
 
 const defaultDocument: JsonCanvasDocument = {
@@ -16,6 +18,7 @@ const defaultDocument: JsonCanvasDocument = {
       width: 6,
       height: 5,
       sizeLabel: "300×250",
+      variantId: "var-1",
     },
     {
       id: "creative-2",
@@ -25,6 +28,7 @@ const defaultDocument: JsonCanvasDocument = {
       width: 2,
       height: 6,
       sizeLabel: "200×600",
+      variantId: "var-1",
     },
     {
       id: "creative-3",
@@ -34,6 +38,7 @@ const defaultDocument: JsonCanvasDocument = {
       width: 8,
       height: 4,
       sizeLabel: "400×400",
+      variantId: "var-1",
     },
   ],
   edges: [],
@@ -41,19 +46,29 @@ const defaultDocument: JsonCanvasDocument = {
 
 export interface StudioState {
   document: JsonCanvasDocument;
+  variants: Variant[];
   selectedNodeId: string | null;
   projectName: string;
+  currentProjectId: string | null;
   uploadedFiles: UploadedFile[];
   aiMessages: AIMessage[];
+  comments: Comment[];
   zoomToFitTrigger: number;
 }
 
+const initialVariants: Variant[] = [
+  { id: "var-1", copy: "Summer sale – 20% off" },
+];
+
 const initialState: StudioState = {
   document: defaultDocument,
+  variants: initialVariants,
   selectedNodeId: null,
   projectName: "Aluvo_Summer-Ads",
+  currentProjectId: null,
   uploadedFiles: [],
   aiMessages: [],
+  comments: [],
   zoomToFitTrigger: 0,
 };
 
@@ -82,6 +97,17 @@ const studioSlice = createSlice({
       const gap = 40;
       const col = count % 3;
       const row = Math.floor(count / 3);
+      let variantId: string | undefined;
+      if (state.variants.length > 0) {
+        variantId = state.variants[0].id;
+      } else {
+        const newVar: Variant = {
+          id: `var-${Date.now()}`,
+          copy: "",
+        };
+        state.variants.push(newVar);
+        variantId = newVar.id;
+      }
       const node: CreativeNode = {
         id: `creative-${Date.now()}-${count}`,
         type: "creative",
@@ -90,6 +116,7 @@ const studioSlice = createSlice({
         width: worldWidth,
         height: worldHeight,
         sizeLabel,
+        variantId,
       };
       state.document.nodes.push(node);
     },
@@ -135,10 +162,55 @@ const studioSlice = createSlice({
     },
     startNewProject(state) {
       state.document = { nodes: [], edges: [] };
+      state.variants = [];
       state.selectedNodeId = null;
       state.projectName = "Untitled Project";
+      state.currentProjectId = null;
       state.uploadedFiles = [];
       state.aiMessages = [];
+      state.comments = [];
+    },
+    loadProject(
+      state,
+      action: {
+        payload: {
+          id: string;
+          name: string;
+          document: JsonCanvasDocument;
+          variants?: Variant[];
+        };
+      },
+    ) {
+      state.currentProjectId = action.payload.id;
+      state.projectName = action.payload.name;
+      state.document = action.payload.document;
+      state.variants = action.payload.variants ?? [];
+      state.selectedNodeId = null;
+      state.uploadedFiles = [];
+      state.aiMessages = [];
+      state.comments = [];
+    },
+    updateVariantCopy(
+      state,
+      action: { payload: { variantId: string; copy: string } },
+    ) {
+      const v = state.variants.find((x) => x.id === action.payload.variantId);
+      if (v) v.copy = action.payload.copy;
+    },
+    addComment(
+      state,
+      action: { payload: { author: string; content: string } },
+    ) {
+      const mentions = (action.payload.content.match(/@\w+/g) ?? []).map((m) =>
+        m.slice(1),
+      );
+      state.comments.push({
+        id: `comment-${Date.now()}`,
+        author: action.payload.author,
+        content: action.payload.content,
+        createdAt: Date.now(),
+        mentions,
+      });
     },
     triggerZoomToFit(state) {
       state.zoomToFitTrigger = Date.now();
@@ -157,6 +229,9 @@ export const {
   sendAIMessage,
   addAIAssistantMessage,
   startNewProject,
+  loadProject,
+  updateVariantCopy,
+  addComment,
   triggerZoomToFit,
 } = studioSlice.actions;
 

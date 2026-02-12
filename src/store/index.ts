@@ -1,9 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
 import studioReducer from "./studioSlice";
+import workspacesReducer from "./workspacesSlice";
+import brandsReducer from "./brandsSlice";
 
 export const store = configureStore({
   reducer: {
     studio: studioReducer,
+    workspaces: workspacesReducer,
+    brands: brandsReducer,
   },
 });
 

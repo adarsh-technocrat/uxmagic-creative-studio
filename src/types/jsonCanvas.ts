@@ -15,10 +15,14 @@ export interface JsonCanvasNodeBase {
 
 export interface CreativeNode extends JsonCanvasNodeBase {
   type: "creative";
-  /** Human-readable size label e.g. "300×250" */
   sizeLabel?: string;
-  /** Optional asset URL or reference */
   asset?: string;
+  variantId?: string;
+}
+
+export interface Variant {
+  id: string;
+  copy: string;
 }
 
 export type JsonCanvasNode = CreativeNode;
@@ -36,7 +40,11 @@ export const STANDARD_AD_SIZES = [
 ] as const;
 
 /** World units per pixel at zoom 1 for a view of height 2 world units */
-export function worldUnitsFromPixels(pixelW: number, pixelH: number, viewHeightWorld = 2) {
+export function worldUnitsFromPixels(
+  pixelW: number,
+  pixelH: number,
+  viewHeightWorld = 2,
+) {
   return {
     width: (pixelW / pixelH) * (viewHeightWorld / 2),
     height: viewHeightWorld / 2,
@@ -55,4 +63,13 @@ export interface AIMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: number;
+}
+
+export interface Comment {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: number;
+  /** Extracted @mentions for notifications */
+  mentions: string[];
 }
