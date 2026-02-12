@@ -261,10 +261,11 @@ export default function InfiniteCanvas() {
   const render = useCallback(
     (gl: WebGLRenderingContext, program: WebGLProgram) => {
       const canvas = gl.canvas as HTMLCanvasElement;
-      const resolution = [canvas.clientWidth, canvas.clientHeight];
-      const aspect = resolution[0] / resolution[1];
+      const width = canvas.width;
+      const height = canvas.height;
+      const aspect = width / height;
 
-      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.viewport(0, 0, width, height);
       gl.useProgram(program);
 
       const resLoc = gl.getUniformLocation(program, "u_resolution");
@@ -276,10 +277,10 @@ export default function InfiniteCanvas() {
         "u_worldPixelSize",
       );
 
-      const worldPixelSizeX = (2 * aspect) / (zoomRef.current * resolution[0]);
-      const worldPixelSizeY = 2 / (zoomRef.current * resolution[1]);
+      const worldPixelSizeX = (2 * aspect) / (zoomRef.current * width);
+      const worldPixelSizeY = 2 / (zoomRef.current * height);
 
-      gl.uniform2f(resLoc, resolution[0], resolution[1]);
+      gl.uniform2f(resLoc, width, height);
       gl.uniform2f(panLoc, panRef.current.x, panRef.current.y);
       gl.uniform1f(zoomLoc, zoomRef.current);
       gl.uniform1f(aspectLoc, aspect);
@@ -321,7 +322,7 @@ export default function InfiniteCanvas() {
     gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
+      const dpr = window.devicePixelRatio ?? 1;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
       canvas.width = Math.floor(w * dpr);
