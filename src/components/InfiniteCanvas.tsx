@@ -495,6 +495,17 @@ export default function InfiniteCanvas() {
       e.preventDefault();
       e.stopPropagation();
       const rect = canvas.getBoundingClientRect();
+
+      if (e.shiftKey) {
+        const scale = 2 / (zoomRef.current * rect.height);
+        if (rect.height > 0) {
+          panRef.current.x += e.deltaX * scale;
+          panRef.current.y -= e.deltaY * scale;
+        }
+        render(gl, program);
+        return;
+      }
+
       const cursorX = (e.clientX - rect.left) / rect.width;
       const cursorY = 1 - (e.clientY - rect.top) / rect.height;
       const aspect = rect.width / rect.height;
