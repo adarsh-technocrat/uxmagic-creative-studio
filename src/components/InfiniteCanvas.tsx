@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { setSelectedNodeId } from "@/store/studioSlice";
+import { setSelectedNodeId, updateNode } from "@/store/studioSlice";
 import type { RootState } from "@/store";
 import type { CreativeNode } from "@/types/jsonCanvas";
 
@@ -254,6 +254,9 @@ export default function InfiniteCanvas() {
 
   const [viewState, setViewState] = useState({ pan: { x: 0, y: 0 }, zoom: 1 });
   const canvasSizeRef = useRef({ width: 0, height: 0 });
+  const draggingNodeIdRef = useRef<string | null>(null);
+  const dragStartPointerRef = useRef({ x: 0, y: 0 });
+  const dragStartWorldRef = useRef({ x: 0, y: 0 });
 
   const ZOOM_MIN = 0.001;
   const ZOOM_MAX = 50;
@@ -333,6 +336,47 @@ export default function InfiniteCanvas() {
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, []);
+
+  const handleNodePointerMove = useCallback(
+    (e: PointerEvent) => {
+      const id = draggingNodeIdRef.current;
+      if (!id) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ch = canvas.clientHeight;
+      const cw = canvas.clientWidth;
+      const zoom = zoomRef.current;
+      if (ch <= 0) return;
+      const scale = 2 / (zoom * ch);
+      const totalDeltaX = e.clientX - dragStartPointerRef.current.x;
+      const totalDeltaY = e.clientY - dragStartPointerRef.current.y;
+      const worldDeltaX = totalDeltaX * scale;
+      const worldDeltaY = -totalDeltaY * scale;
+      const newX = dragStartWorldRef.current.x + worldDeltaX;
+      const newY = dragStartWorldRef.current.y + worldDeltaY;
+      dispatch(updateNode({ id, patch: { x: newX, y: newY } }));
+    },
+    [dispatch],
+  );
+
+  const handleNodePointerUp = useCallback(
+    (e: PointerEvent) => {
+      const id = draggingNodeIdRef.current;
+      draggingNodeIdRef.current = null;
+      window.removeEventListener("pointermove", handleNodePointerMove);
+      window.removeEventListener("pointerup", handleNodePointerUp);
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+      const totalDeltaX = e.clientX - dragStartPointerRef.current.x;
+      const totalDeltaY = e.clientY - dragStartPointerRef.current.y;
+      const dist = Math.sqrt(
+        totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY,
+      );
+      if (dist < 5 && id) {
+        dispatch(setSelectedNodeId(id));
+      }
+    },
+    [dispatch, handleNodePointerMove],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -600,7 +644,7 @@ export default function InfiniteCanvas() {
             return (
               <div
                 key={node.id}
-                className="pointer-events-auto absolute cursor-pointer rounded border-2 bg-white shadow-md transition-shadow hover:shadow-lg"
+                className="pointer-events-auto absolute cursor-move rounded border-2 bg-white shadow-md transition-shadow hover:shadow-lg active:cursor-grabbing"
                 style={{
                   left: rect.left,
                   top: rect.top,
@@ -609,9 +653,14 @@ export default function InfiniteCanvas() {
                   borderColor: isSelected ? "#8b5cf6" : "#e5e7eb",
                   backgroundColor: node.color ?? "#f9fafb",
                 }}
-                onClick={(e) => {
+                onPointerDown={(e) => {
                   e.stopPropagation();
-                  dispatch(setSelectedNodeId(node.id));
+                  draggingNodeIdRef.current = node.id;
+                  dragStartPointerRef.current = { x: e.clientX, y: e.clientY };
+                  dragStartWorldRef.current = { x: node.x, y: node.y };
+                  (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                  window.addEventListener("pointermove", handleNodePointerMove);
+                  window.addEventListener("pointerup", handleNodePointerUp);
                 }}
               >
                 <div className="flex h-full flex-col items-center justify-center gap-1 p-2 text-center">
