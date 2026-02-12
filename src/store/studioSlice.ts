@@ -45,6 +45,7 @@ export interface StudioState {
   projectName: string;
   uploadedFiles: UploadedFile[];
   aiMessages: AIMessage[];
+  zoomToFitTrigger: number;
 }
 
 const initialState: StudioState = {
@@ -53,6 +54,7 @@ const initialState: StudioState = {
   projectName: "Aluvo_Summer-Ads",
   uploadedFiles: [],
   aiMessages: [],
+  zoomToFitTrigger: 0,
 };
 
 const studioSlice = createSlice({
@@ -138,6 +140,9 @@ const studioSlice = createSlice({
       state.uploadedFiles = [];
       state.aiMessages = [];
     },
+    triggerZoomToFit(state) {
+      state.zoomToFitTrigger = Date.now();
+    },
   },
 });
 
@@ -152,6 +157,7 @@ export const {
   sendAIMessage,
   addAIAssistantMessage,
   startNewProject,
+  triggerZoomToFit,
 } = studioSlice.actions;
 
 export default studioSlice.reducer;

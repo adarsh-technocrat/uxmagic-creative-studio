@@ -266,6 +266,14 @@ export default function InfiniteCanvas() {
   const PAN_MOMENTUM_FRICTION = 0.92;
   const PAN_MOMENTUM_MULTIPLIER = 0.42;
   const PAN_VELOCITY_MIN = 0.05;
+  const ZOOM_TO_FIT_PADDING = 20;
+
+  const glRef = useRef<WebGLRenderingContext | null>(null);
+  const programRef = useRef<WebGLProgram | null>(null);
+
+  const zoomToFitTrigger = useSelector(
+    (s: RootState) => s.studio.zoomToFitTrigger,
+  );
 
   const updateRulers = useCallback(() => {
     const canvas = canvasRef.current;
@@ -337,6 +345,51 @@ export default function InfiniteCanvas() {
     return () => cancelAnimationFrame(rafId);
   }, []);
 
+  useEffect(() => {
+    if (zoomToFitTrigger <= 0) return;
+    const creatives = doc.nodes.filter(
+      (n): n is CreativeNode => n.type === "creative",
+    );
+    if (creatives.length === 0) return;
+    const canvas = canvasRef.current;
+    const gl = glRef.current;
+    const program = programRef.current;
+    if (!canvas || !gl || !program) return;
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    if (cw <= 0 || ch <= 0) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const n of creatives) {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + n.width);
+      maxY = Math.max(maxY, n.y + n.height);
+    }
+    const pad = ZOOM_TO_FIT_PADDING;
+    const boundsW = maxX - minX + 2 * pad;
+    const boundsH = maxY - minY + 2 * pad;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const aspect = cw / ch;
+    const zoomW = (2 * aspect) / boundsW;
+    const zoomH = 2 / boundsH;
+    const zoom = Math.min(zoomW, zoomH, ZOOM_MAX);
+    const zoomClamped = Math.max(ZOOM_MIN, zoom);
+
+    panRef.current.x = centerX;
+    panRef.current.y = centerY;
+    zoomRef.current = zoomClamped;
+    targetZoomRef.current = zoomClamped;
+    setViewState({ pan: { x: centerX, y: centerY }, zoom: zoomClamped });
+    render(gl, program);
+    // Only run when user triggers zoom-to-fit, not when doc changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- doc read from closure on trigger
+  }, [zoomToFitTrigger, render]);
+
   const handleNodePointerMove = useCallback(
     (e: PointerEvent) => {
       const id = draggingNodeIdRef.current;
@@ -395,6 +448,9 @@ export default function InfiniteCanvas() {
 
     const program = createProgram(gl, vs, fs);
     if (!program) return;
+
+    glRef.current = gl;
+    programRef.current = program;
 
     const positionLoc = gl.getAttribLocation(program, "a_position");
     const buffer = gl.createBuffer();
@@ -560,6 +616,8 @@ export default function InfiniteCanvas() {
     canvas.addEventListener("wheel", handleContainerWheel, { passive: false });
 
     return () => {
+      glRef.current = null;
+      programRef.current = null;
       if (zoomRafRef.current) cancelAnimationFrame(zoomRafRef.current);
       if (momentumRafRef.current) cancelAnimationFrame(momentumRafRef.current);
       window.removeEventListener("resize", resize);

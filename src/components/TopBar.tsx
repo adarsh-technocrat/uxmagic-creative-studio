@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { addCreative } from "@/store/studioSlice";
+import { addCreative, triggerZoomToFit } from "@/store/studioSlice";
 import type { RootState } from "@/store";
 import { STANDARD_AD_SIZES } from "@/types/jsonCanvas";
 
@@ -29,6 +29,10 @@ export default function TopBar({ zoomPercent = 100 }: TopBarProps) {
   const dispatch = useDispatch();
   const projectName = useSelector((s: RootState) => s.studio.projectName);
   const doc = useSelector((s: RootState) => s.studio.document);
+
+  const handleZoomToFit = useCallback(() => {
+    dispatch(triggerZoomToFit());
+  }, [dispatch]);
 
   const addSize = useCallback(
     (pixelWidth: number, pixelHeight: number, label?: string) => {
@@ -95,6 +99,15 @@ export default function TopBar({ zoomPercent = 100 }: TopBarProps) {
           <option>Variants</option>
         </select>
         <div className="h-4 w-px bg-gray-200" />
+        <button
+          type="button"
+          className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          onClick={handleZoomToFit}
+          title="Zoom to fit all creatives"
+          aria-label="Zoom to fit"
+        >
+          Fit
+        </button>
         <span
           className="text-xs text-gray-500"
           title="Scroll to zoom. Shift + scroll (or click-drag) to pan canvas."
