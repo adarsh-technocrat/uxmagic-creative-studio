@@ -1,6 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { setSelectedNodeId } from "@/store/studioSlice";
+import type { RootState } from "@/store";
+import type { CreativeNode } from "@/types/jsonCanvas";
 
 const RULER_SIZE = 24;
 const MAJOR_INTERVAL = 100;
@@ -41,13 +45,6 @@ const FRAGMENT_SHADER = `
     vec3 gridColor = vec3(0.2, 0.2, 0.22);
     vec3 bgColor = vec3(0.0, 0.0, 0.0);
     vec3 color = mix(bgColor, gridColor, gridAlpha * 0.6);
-
-    float circleRadius = 80.0;
-    float dist = length(world);
-    float circleEdge = length(u_worldPixelSize) * 2.0;
-    float circle = 1.0 - smoothstep(circleRadius - circleEdge, circleRadius + circleEdge, dist);
-    vec3 circleColor = vec3(0.95, 0.45, 0.2);
-    color = mix(color, circleColor, circle);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -219,7 +216,25 @@ function drawLeftRuler(
   }
 }
 
+function worldToScreen(
+  node: CreativeNode,
+  pan: { x: number; y: number },
+  zoom: number,
+  width: number,
+  height: number,
+) {
+  const aspect = width / height;
+  const left = width / 2 + (node.x - pan.x) * zoom * (width / (2 * aspect));
+  const top = height / 2 - (node.y - pan.y) * zoom * (height / 2);
+  const pixelW = node.width * zoom * (width / (2 * aspect));
+  const pixelH = node.height * zoom * (height / 2);
+  return { left, top, width: pixelW, height: pixelH };
+}
+
 export default function InfiniteCanvas() {
+  const dispatch = useDispatch();
+  const doc = useSelector((s: RootState) => s.studio.document);
+  const selectedNodeId = useSelector((s: RootState) => s.studio.selectedNodeId);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const topRulerRef = useRef<HTMLCanvasElement>(null);
@@ -236,6 +251,9 @@ export default function InfiniteCanvas() {
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const lastMoveTimeRef = useRef(0);
   const velocityRef = useRef({ x: 0, y: 0 });
+
+  const [viewState, setViewState] = useState({ pan: { x: 0, y: 0 }, zoom: 1 });
+  const canvasSizeRef = useRef({ width: 0, height: 0 });
 
   const ZOOM_MIN = 0.001;
   const ZOOM_MAX = 50;
@@ -291,6 +309,30 @@ export default function InfiniteCanvas() {
     },
     [updateRulers],
   );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let rafId = 0;
+    let last = 0;
+    const throttleMs = 50;
+    const tick = () => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvasSizeRef.current = { width: w, height: h };
+      const now = performance.now();
+      if (now - last >= throttleMs) {
+        last = now;
+        setViewState({
+          pan: { ...panRef.current },
+          zoom: zoomRef.current,
+        });
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -531,6 +573,61 @@ export default function InfiniteCanvas() {
           height: `calc(100% - ${RULER_SIZE}px)`,
         }}
       />
+      <div
+        className="absolute pointer-events-none z-10"
+        style={{
+          left: RULER_SIZE,
+          top: RULER_SIZE,
+          right: 0,
+          bottom: 0,
+          width: `calc(100% - ${RULER_SIZE}px)`,
+          height: `calc(100% - ${RULER_SIZE}px)`,
+        }}
+      >
+        {doc.nodes
+          .filter((n): n is CreativeNode => n.type === "creative")
+          .map((node) => {
+            const { width: cw, height: ch } = canvasSizeRef.current;
+            if (cw <= 0 || ch <= 0) return null;
+            const rect = worldToScreen(
+              node,
+              viewState.pan,
+              viewState.zoom,
+              cw,
+              ch,
+            );
+            const isSelected = selectedNodeId === node.id;
+            return (
+              <div
+                key={node.id}
+                className="pointer-events-auto absolute cursor-pointer rounded border-2 bg-white shadow-md transition-shadow hover:shadow-lg"
+                style={{
+                  left: rect.left,
+                  top: rect.top,
+                  width: Math.max(1, rect.width),
+                  height: Math.max(1, rect.height),
+                  borderColor: isSelected ? "#8b5cf6" : "#e5e7eb",
+                  backgroundColor: node.color ?? "#f9fafb",
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dispatch(setSelectedNodeId(node.id));
+                }}
+              >
+                <div className="flex h-full flex-col items-center justify-center gap-1 p-2 text-center">
+                  {node.sizeLabel && (
+                    <span className="text-xs font-medium text-gray-500">
+                      {node.sizeLabel}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-gray-400">
+                    {Math.round(node.width * 50)}×{Math.round(node.height * 50)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 }
